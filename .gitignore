@@ -1,0 +1,21 @@
+# Build output
+/bin/
+*.exe
+*.exe~
+*.test
+*.out
+
+# Web UI dependencies (the built UI in internal/webui/dist is committed:
+# go:embed needs it, so `go build` works without Node.js)
+node_modules/
+
+# Logs
+*.log
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
