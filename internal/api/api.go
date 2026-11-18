@@ -90,7 +90,7 @@ func Handler(n *node.Node) http.Handler {
 		httpx.JSON(w, http.StatusOK, cs)
 	})
 	mux.HandleFunc("GET /v1/channels/{channel}/messages", func(w http.ResponseWriter, r *http.Request) {
-		ch, err := resolveChannel(n, r.PathValue("channel"), r.URL.Query().Get("as"))
+		host, err := boardHost(n, r.PathValue("channel"))
 		if err != nil {
 			writeErr(w, err)
 			return
@@ -99,7 +99,7 @@ func Handler(n *node.Node) http.Handler {
 		after, _ := strconv.ParseInt(q.Get("after_seq"), 10, 64)
 		before, _ := strconv.ParseInt(q.Get("before_seq"), 10, 64)
 		limit, _ := strconv.Atoi(q.Get("limit"))
-		ms, err := n.Messages(ch, after, before, limit)
+		ms, err := n.Messages(protocol.BoardChannel(host), after, before, limit)
 		if err != nil {
 			writeErr(w, err)
 			return
@@ -167,58 +167,30 @@ func send(r *http.Request, n *node.Node, req protocol.SendRequest, files []proto
 	if err != nil {
 		return protocol.Message{}, err
 	}
-	n.Touch(as.ID)
-	o := node.SendOpts{Intent: req.Intent, ReplyTo: req.ReplyTo, Hops: req.Hops, Files: files}
-	to := strings.TrimSpace(req.To)
-	switch {
-	case strings.HasPrefix(to, "board:"):
-		return n.PostBoard(r.Context(), as, strings.TrimPrefix(to, "board:"), req.Text, o)
-	case strings.HasPrefix(to, "#"):
-		m, err := n.ResolveMachine(to)
-		if err != nil {
-			return protocol.Message{}, err
-		}
-		return n.PostBoard(r.Context(), as, m.InstanceID, req.Text, o)
-	case strings.HasPrefix(to, "dm:"):
-		parts := strings.Split(to, ":")
-		if len(parts) != 3 || (parts[1] != as.ID && parts[2] != as.ID) {
-			return protocol.Message{}, fmt.Errorf("%w: %s is not a conversation of %s", node.ErrInvalid, to, as.Nick)
-		}
-		other := parts[1]
-		if other == as.ID {
-			other = parts[2]
-		}
-		to = other
-	}
-	peer, err := n.ResolveIdentity(to)
+	machineID, err := boardHost(n, req.To)
 	if err != nil {
 		return protocol.Message{}, err
 	}
-	return n.SendDM(r.Context(), as, peer, req.Text, o)
+	n.Touch(as.ID)
+	o := node.SendOpts{Intent: req.Intent, ReplyTo: req.ReplyTo, Hops: req.Hops, Files: files}
+	return n.PostBoard(r.Context(), as, machineID, req.Text, o)
 }
 
-// resolveChannel accepts a channel id, "#machine" or "@nick" (DM with the
-// given local identity `as`).
-func resolveChannel(n *node.Node, sel, as string) (string, error) {
-	switch {
-	case strings.HasPrefix(sel, "board:"), strings.HasPrefix(sel, "dm:"):
-		return sel, nil
-	case strings.HasPrefix(sel, "#"):
-		m, err := n.ResolveMachine(sel)
-		if err != nil {
-			return "", err
-		}
-		return protocol.BoardChannel(m.InstanceID), nil
+// boardHost resolves a machine channel ("#machine", "#" = this machine, or
+// "board:<id>") to the instance id of the machine hosting it.
+func boardHost(n *node.Node, sel string) (string, error) {
+	sel = strings.TrimSpace(sel)
+	if id, ok := strings.CutPrefix(sel, "board:"); ok {
+		return id, nil
 	}
-	me, err := n.LocalIdentity(as)
+	if !strings.HasPrefix(sel, "#") {
+		return "", fmt.Errorf("%w: %q is not a machine channel; direct messages were removed in netchat 0.2.0 (post to '#machine' and @mention someone to notify them)", node.ErrInvalid, sel)
+	}
+	m, err := n.ResolveMachine(sel)
 	if err != nil {
 		return "", err
 	}
-	peer, err := n.ResolveIdentity(sel)
-	if err != nil {
-		return "", err
-	}
-	return protocol.DMChannel(me.ID, peer.ID), nil
+	return m.InstanceID, nil
 }
 
 func writeErr(w http.ResponseWriter, err error) {

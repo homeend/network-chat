@@ -11,7 +11,7 @@ import (
 	"netchat/internal/protocol"
 )
 
-// Agent inbox: GET /v1/inbox?as=<identity>&wait=<sec>&limit=<n>&only=dm,mention,board
+// Agent inbox: GET /v1/inbox?as=<identity>&wait=<sec>&limit=<n>&only=mention,board
 // returns unacknowledged items (oldest first), long-polling up to `wait`
 // seconds (max 60) when empty. POST /v1/ack {"as":..,"ids":[..]} acknowledges.
 func registerInbox(mux *http.ServeMux, n *node.Node) {
@@ -24,13 +24,15 @@ func registerInbox(mux *http.ServeMux, n *node.Node) {
 		}
 		var f node.InboxFilter
 		for _, s := range strings.Split(q.Get("only"), ",") {
-			switch strings.TrimSpace(s) {
-			case "dm":
-				f.DM = true
+			switch s = strings.TrimSpace(s); s {
+			case "":
 			case "board":
 				f.Board = true
 			case "mention":
 				f.Mention = true
+			default: // e.g. "dm" (removed in 0.2.0): an empty filter would mean "everything"
+				httpx.Error(w, http.StatusBadRequest, "invalid", "unknown inbox source "+strconv.Quote(s)+": use mention, board")
+				return
 			}
 		}
 		limit, _ := strconv.Atoi(q.Get("limit"))

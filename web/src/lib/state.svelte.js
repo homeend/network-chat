@@ -1,4 +1,4 @@
-import { api, dmChannel } from './api.js'
+import { api } from './api.js'
 import { setMyNicks } from './markdown.js'
 
 const store = {
@@ -15,7 +15,7 @@ class AppState {
   identities = $state([])
   asId = $state(store.get('as', ''))
   current = $state(store.get('current', ''))
-  pendingPeer = $state(null) // directory entry for a DM without history yet
+  mentionReq = $state(null) // nick to insert into the composer (person clicked)
   messages = $state([])
   hasOlder = $state(false)
   loading = $state(false)
@@ -41,20 +41,9 @@ class AppState {
   localIds = $derived(new Set(this.identities.map((i) => i.id)))
   self = $derived(this.machines.find((m) => m.self))
   boards = $derived(this.channels.filter((c) => c.kind === 'board'))
-  dms = $derived(this.channels.filter((c) => c.kind === 'dm'))
   totalUnread = $derived(this.channels.reduce((n, c) => n + this.unread(c), 0))
 
-  chan = $derived.by(() => {
-    const id = this.current
-    if (!id) return null
-    const c = this.channels.find((c) => c.id === id)
-    if (c) return c
-    if (id.startsWith('dm:') && this.pendingPeer) {
-      const p = this.pendingPeer
-      return { id, kind: 'dm', name: '@' + p.nick, peer: p, me: this.me, online: p.online, lastSeq: 0 }
-    }
-    return null
-  })
+  chan = $derived(this.channels.find((c) => c.id === this.current) ?? null)
 
   #refreshTimer = null
 
@@ -66,7 +55,7 @@ class AppState {
       Object.assign(this, { machines, channels, directory, identities })
       setMyNicks(identities.map((i) => i.nick))
       this.files = Object.fromEntries(files.map((f) => [f.id, f]))
-      if (this.current && !this.chan && !this.current.startsWith('dm:')) this.current = ''
+      if (this.current && !this.chan) this.current = ''
       if (!this.current && this.self) this.open('board:' + this.self.instanceId)
     } catch (e) {
       this.connected = false
@@ -144,19 +133,19 @@ class AppState {
     store.set('as', id)
   }
 
-  open(id, peer = null) {
-    const c = this.channels.find((c) => c.id === id)
-    if (c?.kind === 'dm' && c.me && this.localIds.has(c.me.id)) this.setAs(c.me.id)
+  open(id) {
     this.current = id
-    this.pendingPeer = peer
     this.error = ''
     store.set('current', id)
     this.load(id)
   }
 
-  openDM(entry) {
-    if (!this.me || entry.id === this.me.id) return
-    this.open(dmChannel(this.me.id, entry.id), entry)
+  // A person was clicked: @mention them in the open channel (or, if none is
+  // open, on their machine's channel). There are no direct messages.
+  mention(entry) {
+    if (!entry || entry.id === this.me?.id) return
+    if (!this.chan) this.open('board:' + entry.machineId)
+    this.mentionReq = entry.nick
   }
 
   async load(id) {

@@ -121,13 +121,14 @@ func (n *Node) Run(ctx context.Context) error {
 	}
 	n.runCtx.Store(&ctx)
 	n.disc = &discovery.Discovery{
-		Port:      n.Cfg.Port,
-		Group:     group,
-		AllIfaces: n.Cfg.AllIfaces,
-		Self:      n.SelfInfo,
-		SelfID:    n.Cfg.InstanceID,
-		OnBeacon:  n.onBeacon,
-		Log:       n.Log,
+		Port:       n.Cfg.Port,
+		LegacyPort: protocol.LegacyPort,
+		Group:      group,
+		AllIfaces:  n.Cfg.AllIfaces,
+		Self:       n.SelfInfo,
+		SelfID:     n.Cfg.InstanceID,
+		OnBeacon:   n.onBeacon,
+		Log:        n.Log,
 		OnNetworkChange: func() {
 			n.Log.Info("network changed, looking for peers")
 			go n.findPeers(ctx)
@@ -341,6 +342,10 @@ func (n *Node) Scan(ctx context.Context) int {
 	own := map[string]bool{}
 	var targets []string
 	seenNet := map[string]bool{}
+	ports := []string{strconv.Itoa(n.Cfg.Port)}
+	if n.Cfg.Port != protocol.LegacyPort {
+		ports = append(ports, strconv.Itoa(protocol.LegacyPort)) // older versions
+	}
 	ifs := discovery.UsableInterfaces(n.Cfg.AllIfaces)
 	for _, it := range ifs {
 		for _, a := range it.Addrs {
@@ -360,7 +365,9 @@ func (n *Node) Scan(ctx context.Context) int {
 			for i := 1; i < 255; i++ {
 				ip := net.IPv4(base[0], base[1], base[2], byte(i)).String()
 				if !own[ip] {
-					targets = append(targets, net.JoinHostPort(ip, strconv.Itoa(n.Cfg.Port)))
+					for _, p := range ports {
+						targets = append(targets, net.JoinHostPort(ip, p))
+					}
 				}
 			}
 		}
@@ -368,7 +375,7 @@ func (n *Node) Scan(ctx context.Context) int {
 	var (
 		wg    sync.WaitGroup
 		mu    sync.Mutex
-		found int
+		found = map[string]bool{} // instance IDs: a peer may answer on both ports
 		sem   = make(chan struct{}, scanParallel)
 	)
 	for _, addr := range targets {
@@ -382,29 +389,48 @@ func (n *Node) Scan(ctx context.Context) int {
 			defer func() { <-sem }()
 			c, cancel := context.WithTimeout(ctx, scanTimeout)
 			defer cancel()
-			if _, err := n.Contact(c, addr, "scan"); err == nil {
+			if info, err := n.Contact(c, addr, "scan"); err == nil {
 				mu.Lock()
-				found++
+				found[info.InstanceID] = true
 				mu.Unlock()
 			}
 		}(addr)
 	}
 	wg.Wait()
-	n.Log.Info("subnet scan done", "probed", len(targets), "found", found)
-	return found
+	n.Log.Info("subnet scan done", "probed", len(targets), "found", len(found))
+	return len(found)
 }
 
 // AddPeer contacts addr ("host" or "host:port") and saves it as a favorite.
 func (n *Node) AddPeer(ctx context.Context, addr string) (protocol.Info, error) {
 	addr = strings.TrimSpace(addr)
+	addrs := []string{addr}
 	if _, _, err := net.SplitHostPort(addr); err != nil {
-		addr = net.JoinHostPort(addr, strconv.Itoa(protocol.DefaultPort))
+		// No port: try ours, then the one older versions listen on.
+		addrs = []string{net.JoinHostPort(addr, strconv.Itoa(protocol.DefaultPort)),
+			net.JoinHostPort(addr, strconv.Itoa(protocol.LegacyPort))}
 	}
-	c, cancel := context.WithTimeout(ctx, contactTimeout)
-	defer cancel()
-	info, err := n.Contact(c, addr, "manual")
-	if err != nil {
+	var (
+		info     protocol.Info
+		err      error
+		firstErr error
+	)
+	for _, addr = range addrs {
+		c, cancel := context.WithTimeout(ctx, contactTimeout)
+		info, err = n.Contact(c, addr, "manual")
+		cancel()
+		if err == nil || errors.Is(err, ErrSelf) {
+			break
+		}
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
+	if errors.Is(err, ErrSelf) {
 		return info, err
+	}
+	if err != nil {
+		return info, firstErr
 	}
 	n.favMu.Lock()
 	known := false

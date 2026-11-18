@@ -15,13 +15,12 @@ const MaxInboxWait = 60 * time.Second
 
 // InboxFilter selects which sources feed an inbox.
 type InboxFilter struct {
-	DM, Board, Mention bool
+	Board, Mention bool
 }
 
-func (f InboxFilter) all() bool { return !f.DM && !f.Board && !f.Mention }
+func (f InboxFilter) all() bool { return !f.Board && !f.Mention }
 
 // Inbox returns unacknowledged messages for a local identity, oldest first:
-//   - dm:      direct messages to it
 //   - board:   posts on this machine's channel
 //   - mention: posts on any machine channel that @mention its nick
 //
@@ -32,33 +31,20 @@ func (n *Node) Inbox(as protocol.Identity, f InboxFilter, limit int) ([]protocol
 		limit = 50
 	}
 	if f.all() {
-		f = InboxFilter{DM: true, Board: true, Mention: true}
+		f = InboxFilter{Board: true, Mention: true}
 	}
 	cursors, err := n.Store.Cursors(as.ID)
 	if err != nil {
 		return nil, err
 	}
 	own := protocol.BoardChannel(n.Cfg.InstanceID)
-	var channels []string
-	if f.Board || f.Mention {
-		bs, err := n.Store.Channels("board:")
-		if err != nil {
-			return nil, err
-		}
-		for _, b := range bs {
-			channels = append(channels, b.Channel)
-		}
+	bs, err := n.Store.Channels("board:")
+	if err != nil {
+		return nil, err
 	}
-	if f.DM {
-		ds, err := n.Store.Channels("dm:")
-		if err != nil {
-			return nil, err
-		}
-		for _, d := range ds {
-			if strings.Contains(d.Channel, as.ID) {
-				channels = append(channels, d.Channel)
-			}
-		}
+	var channels []string
+	for _, b := range bs {
+		channels = append(channels, b.Channel)
 	}
 
 	var out []protocol.InboxItem
@@ -76,8 +62,6 @@ func (n *Node) Inbox(as protocol.Identity, f InboxFilter, limit int) ([]protocol
 				}
 				reason := ""
 				switch {
-				case strings.HasPrefix(ch, "dm:"):
-					reason = "dm"
 				case mentions(m.Text, as.Nick) && f.Mention:
 					reason = "mention"
 				case ch == own && f.Board:

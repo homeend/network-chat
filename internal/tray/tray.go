@@ -3,9 +3,21 @@
 // Package tray shows the system tray icon (fyne.io/systray).
 package tray
 
-import "fyne.io/systray"
+import (
+	"sync"
+
+	"fyne.io/systray"
+)
 
 const Supported = true
+
+// systray.Quit runs once and is lost if the tray window does not exist yet,
+// so a Stop that comes before onReady is deferred until then.
+var (
+	mu      sync.Mutex
+	ready   bool
+	stopped bool
+)
 
 type Options struct {
 	Tooltip string
@@ -17,6 +29,14 @@ type Options struct {
 // Run shows the icon and blocks until Quit/Stop. Call it on the main goroutine.
 func Run(o Options) {
 	systray.Run(func() {
+		mu.Lock()
+		ready = true
+		s := stopped
+		mu.Unlock()
+		if s {
+			systray.Quit()
+			return
+		}
 		systray.SetIcon(iconBytes())
 		systray.SetTooltip(o.Tooltip)
 		systray.SetOnTapped(o.OnOpen) // left click opens the UI; right click shows the menu
@@ -40,4 +60,12 @@ func Run(o Options) {
 }
 
 // Stop removes the icon and makes Run return.
-func Stop() { systray.Quit() }
+func Stop() {
+	mu.Lock()
+	stopped = true
+	r := ready
+	mu.Unlock()
+	if r {
+		systray.Quit()
+	}
+}

@@ -29,7 +29,7 @@ func inbox(args []string) error {
 	as := f.String("as", "", "local identity (default: first human)")
 	wait := f.Float64("wait", 0, "seconds to wait for new messages when empty (max 60)")
 	ack := f.Bool("ack", false, "acknowledge the returned items")
-	only := f.String("only", "", "comma list of sources: dm,mention,board (default all)")
+	only := f.String("only", "", "comma list of sources: mention,board (default all)")
 	limit := f.Int("n", 50, "max items")
 	c, err := f.parse(args)
 	if err != nil {
@@ -78,7 +78,7 @@ func waitCmd(args []string) error {
 	f := newFlags("wait")
 	as := f.String("as", "", "local identity (default: first human)")
 	timeout := f.Float64("timeout", 60, "give up after this many seconds (exit code 3); 0 = forever")
-	only := f.String("only", "", "comma list of sources: dm,mention,board (default all)")
+	only := f.String("only", "", "comma list of sources: mention,board (default all)")
 	c, err := f.parse(args)
 	if err != nil {
 		return err
@@ -120,13 +120,13 @@ func waitCmd(args []string) error {
 // agent runs a hook command for every inbox message:
 //   - the inbox item JSON is written to the hook's stdin
 //   - env: NETCHAT_AS, NETCHAT_FROM, NETCHAT_REASON, NETCHAT_CHANNEL, NETCHAT_MESSAGE_ID, NETCHAT_TEXT, NETCHAT_API
-//   - non-empty stdout is sent back as the reply (DM -> sender, board -> same board)
+//   - non-empty stdout is sent back as the reply, on the channel the message came from
 //   - exit 0 acks the message; non-zero leaves it unacked and retries (max 3 tries)
 func agentCmd(args []string) error {
 	f := newFlags("agent")
 	as := f.String("as", "", "local identity to act as (required)")
 	hook := f.String("exec", "", "command to run per message (required)")
-	only := f.String("only", "dm,mention", "comma list of sources: dm,mention,board")
+	only := f.String("only", "mention", "comma list of sources: mention,board")
 	maxHops := f.Int("max-hops", 6, "do not reply to messages that already hopped this many times (agent loops)")
 	timeout := f.Duration("timeout", 10*time.Minute, "hook timeout")
 	c, err := f.parse(args)
@@ -134,7 +134,7 @@ func agentCmd(args []string) error {
 		return err
 	}
 	if *as == "" || *hook == "" {
-		return errors.New(`usage: netchat agent --as <identity> --exec "<command>" [--only dm,mention,board]`)
+		return errors.New(`usage: netchat agent --as <identity> --exec "<command>" [--only mention,board]`)
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -174,11 +174,7 @@ func agentCmd(args []string) error {
 				case m.Hops >= *maxHops:
 					fmt.Fprintf(os.Stderr, "not replying to %s: hop limit %d reached\n", m.ID, *maxHops)
 				default:
-					to := m.Channel // board: reply on the same board
-					if it.Reason == "dm" {
-						to = m.From.ID
-					}
-					if _, err := c.Send(protocol.SendRequest{As: *as, To: to, Text: reply,
+					if _, err := c.Send(protocol.SendRequest{As: *as, To: m.Channel, Text: reply,
 						Intent: protocol.IntentAnswer, ReplyTo: m.ID, Hops: m.Hops + 1}); err != nil {
 						fmt.Fprintf(os.Stderr, "reply to %s failed: %v\n", m.ID, err)
 					}

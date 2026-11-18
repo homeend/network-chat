@@ -99,6 +99,6 @@ cat <<'EOF'
 
 Run:  bin/netchat            (tray icon + opens the chat in your browser)
       bin/netchat serve      (headless)
-If ufw is enabled, allow the LAN port once:
-      sudo ufw allow 47800/udp && sudo ufw allow 47800/tcp
+If ufw is enabled, allow the LAN port once (47800: older netchat peers):
+      sudo ufw allow 27800/udp && sudo ufw allow 27800/tcp && sudo ufw allow 47800/udp
 EOF

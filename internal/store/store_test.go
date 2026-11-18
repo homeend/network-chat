@@ -83,10 +83,10 @@ func TestQueryAndTail(t *testing.T) {
 
 func TestCursorsNeverGoBack(t *testing.T) {
 	s := open(t)
-	_ = s.Ack("me", "dm:a:b", 5)
-	_ = s.Ack("me", "dm:a:b", 3)
+	_ = s.Ack("me", "board:a", 5)
+	_ = s.Ack("me", "board:a", 3)
 	c, err := s.Cursors("me")
-	if err != nil || c["dm:a:b"] != 5 {
+	if err != nil || c["board:a"] != 5 {
 		t.Fatalf("cursor = %v err %v", c, err)
 	}
 }

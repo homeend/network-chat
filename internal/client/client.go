@@ -18,7 +18,7 @@ import (
 )
 
 type Client struct {
-	Base string // e.g. http://127.0.0.1:47801
+	Base string // e.g. http://127.0.0.1:27801
 	HTTP *http.Client
 }
 
@@ -112,12 +112,9 @@ func (c *Client) Channels() ([]protocol.ChannelInfo, error) {
 	return out, c.do(http.MethodGet, "/v1/channels", nil, &out)
 }
 
-// Messages reads a channel: channel id, "#machine" or "@nick" (DM of `as`).
-func (c *Client) Messages(channel, as string, afterSeq, beforeSeq int64, limit int) ([]protocol.Message, error) {
+// Messages reads a machine channel: channel id or "#machine".
+func (c *Client) Messages(channel string, afterSeq, beforeSeq int64, limit int) ([]protocol.Message, error) {
 	q := url.Values{}
-	if as != "" {
-		q.Set("as", as)
-	}
 	if afterSeq > 0 {
 		q.Set("after_seq", strconv.FormatInt(afterSeq, 10))
 	}

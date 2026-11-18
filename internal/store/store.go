@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS messages (
 	seq       INTEGER NOT NULL,
 	ts        INTEGER NOT NULL,
 	from_id   TEXT NOT NULL,
-	to_id     TEXT,
+	to_id     TEXT,                    -- unused since direct messages were removed
 	body      TEXT NOT NULL,           -- full protocol.Message JSON
 	UNIQUE(channel, seq)
 );
@@ -111,7 +111,7 @@ func (s *Store) DeleteIdentity(id string) error {
 // ---- messages ----
 
 // Insert stores m. If m.Seq is 0 the next seq of the channel is assigned
-// (local authority: own board, DMs). Duplicate ids are ignored and reported
+// (local authority: own board). Duplicate ids are ignored and reported
 // with inserted=false. m is updated with the assigned seq.
 func (s *Store) Insert(m *protocol.Message) (inserted bool, err error) {
 	tx, err := s.db.Begin()
@@ -135,12 +135,8 @@ func (s *Store) Insert(m *protocol.Message) (inserted bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	var to any
-	if m.To != nil {
-		to = m.To.ID
-	}
-	res, err := tx.Exec(`INSERT OR IGNORE INTO messages(id, channel, seq, ts, from_id, to_id, body) VALUES(?,?,?,?,?,?,?)`,
-		m.ID, m.Channel, m.Seq, m.TS.UnixMilli(), m.From.ID, to, string(body))
+	res, err := tx.Exec(`INSERT OR IGNORE INTO messages(id, channel, seq, ts, from_id, body) VALUES(?,?,?,?,?,?)`,
+		m.ID, m.Channel, m.Seq, m.TS.UnixMilli(), m.From.ID, string(body))
 	if err != nil {
 		return false, err
 	}

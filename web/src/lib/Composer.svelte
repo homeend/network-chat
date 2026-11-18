@@ -112,6 +112,17 @@
     }
   }
 
+  // A person was clicked elsewhere (app.mention): add @nick at the cursor.
+  $effect(() => {
+    const nick = app.mentionReq
+    if (!nick || !ta) return
+    app.mentionReq = null
+    const s = ta.selectionStart
+    const sep = s > 0 && !/\s/.test(draft[s - 1]) ? ' ' : ''
+    ta.focus()
+    insertAtCursor(`${sep}@${nick} `)
+  })
+
   function insertAtCursor(text) {
     const { selectionStart: s, selectionEnd: en } = ta
     draft = draft.slice(0, s) + text + draft.slice(en)

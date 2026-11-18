@@ -21,8 +21,8 @@ func (n *Node) CanDelete(m protocol.Message) bool {
 	return m.FromMachine == n.Cfg.InstanceID || m.Channel == protocol.BoardChannel(n.Cfg.InstanceID)
 }
 
-// DeleteMessage removes a message for everyone. The machine that holds the
-// authoritative copy (board host, DM recipient) must be reachable; nothing is
+// DeleteMessage removes a message for everyone. The board host, which holds
+// the authoritative copy, must be reachable; nothing is
 // changed locally if it refuses or is offline. Files offered with the message
 // by this machine are withdrawn.
 func (n *Node) DeleteMessage(ctx context.Context, id string) (protocol.Message, error) {
@@ -37,16 +37,11 @@ func (n *Node) DeleteMessage(ctx context.Context, id string) (protocol.Message, 
 		return m, fmt.Errorf("%w: you can remove only messages sent from this machine, or anything on its own channel", ErrForbidden)
 	}
 	req := protocol.DeleteRequest{ID: m.ID, Machine: n.Cfg.InstanceID}
-	var remote, path string
-	switch {
-	case strings.HasPrefix(m.Channel, "board:"):
-		remote, path = strings.TrimPrefix(m.Channel, "board:"), "/p/board/delete"
-	case strings.HasPrefix(m.Channel, "dm:"):
-		remote, path = m.ToMachine, "/p/dm/delete"
-	}
-	if remote != "" && remote != n.Cfg.InstanceID {
+	// Messages outside machine channels (0.1.0 direct messages) are only removed here.
+	remote, _ := strings.CutPrefix(m.Channel, "board:")
+	if strings.HasPrefix(m.Channel, "board:") && remote != n.Cfg.InstanceID {
 		// Not found there = already gone (or never delivered): remove our copy anyway.
-		if err := n.postToPeer(ctx, remote, path, req, nil); err != nil && !errors.Is(err, ErrNotFound) {
+		if err := n.postToPeer(ctx, remote, "/p/board/delete", req, nil); err != nil && !errors.Is(err, ErrNotFound) {
 			return m, err
 		}
 	}
@@ -57,9 +52,8 @@ func (n *Node) DeleteMessage(ctx context.Context, id string) (protocol.Message, 
 	return t, n.applyDelete(t)
 }
 
-// AcceptDelete is the peer side of POST /p/board/delete (board=true) and
-// POST /p/dm/delete.
-func (n *Node) AcceptDelete(req protocol.DeleteRequest, board bool) error {
+// AcceptDelete is the board host side of POST /p/board/delete.
+func (n *Node) AcceptDelete(req protocol.DeleteRequest) error {
 	m, err := n.Store.MessageByID(req.ID)
 	if errors.Is(err, store.ErrNotFound) {
 		return fmt.Errorf("%w: message %s", ErrNotFound, req.ID)
@@ -67,7 +61,7 @@ func (n *Node) AcceptDelete(req protocol.DeleteRequest, board bool) error {
 	if err != nil {
 		return err
 	}
-	if board && m.Channel != protocol.BoardChannel(n.Cfg.InstanceID) || !board && !strings.HasPrefix(m.Channel, "dm:") {
+	if m.Channel != protocol.BoardChannel(n.Cfg.InstanceID) {
 		return fmt.Errorf("%w: message %s", ErrNotFound, req.ID)
 	}
 	if req.Machine == "" || m.FromMachine != req.Machine {

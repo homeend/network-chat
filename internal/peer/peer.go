@@ -50,35 +50,19 @@ func Handler(n *node.Node) http.Handler {
 		httpx.JSON(w, http.StatusOK, n.PeerEntries())
 	})
 
-	// Direct message to one of our identities.
-	mux.HandleFunc("POST /p/dm", func(w http.ResponseWriter, r *http.Request) {
-		var m protocol.Message
-		if err := httpx.Decode(r, maxBody, &m); err != nil {
+	// Removal requests from the sender's machine.
+	mux.HandleFunc("POST /p/board/delete", func(w http.ResponseWriter, r *http.Request) {
+		var req protocol.DeleteRequest
+		if err := httpx.Decode(r, 4<<10, &req); err != nil {
 			httpx.Error(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		if err := n.AcceptDM(m); err != nil {
+		if err := n.AcceptDelete(req); err != nil {
 			writeErr(w, err)
 			return
 		}
 		httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
 	})
-
-	// Removal requests from the sender's machine.
-	for path, isBoard := range map[string]bool{"POST /p/board/delete": true, "POST /p/dm/delete": false} {
-		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
-			var req protocol.DeleteRequest
-			if err := httpx.Decode(r, 4<<10, &req); err != nil {
-				httpx.Error(w, http.StatusBadRequest, "bad_request", err.Error())
-				return
-			}
-			if err := n.AcceptDelete(req, isBoard); err != nil {
-				writeErr(w, err)
-				return
-			}
-			httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
-		})
-	}
 
 	// Our machine board: post, page history, live stream.
 	board := protocol.BoardChannel(n.Cfg.InstanceID)

@@ -73,7 +73,7 @@ func WSLAdvice(w WSL, ips []string) []string {
 	if w.Mode == "mirrored" {
 		return []string{
 			"Running in WSL2 (mirrored networking): Windows and WSL share one IP.",
-			"If netchat also runs on Windows, use other ports here: --http-port 47810 --api 127.0.0.1:47811",
+			"If netchat also runs on Windows, use other ports here: --http-port 27810 --api 127.0.0.1:27811",
 			"If LAN machines cannot reach this instance, allow inbound for WSL (admin PowerShell):",
 			"  Set-NetFirewallHyperVVMSetting -Name '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' -DefaultInboundAction Allow",
 		}
@@ -89,7 +89,7 @@ func WSLAdvice(w WSL, ips []string) []string {
 		"       [wsl2]",
 		"       networkingMode=mirrored",
 		"     then run `wsl --shutdown` and start again (if netchat also runs on Windows:",
-		"     --http-port 47810 --api 127.0.0.1:47811).",
+		"     --http-port 27810 --api 127.0.0.1:27811).",
 		"Or link just this PC: on Windows run `netchat add " + addr + "` (the WSL IP can change after restarts).",
 	}
 }

@@ -111,15 +111,19 @@ func app(args []string) error {
 		done <- err
 		tray.Stop()
 	}()
-	go func() {
-		select {
-		case <-ready:
-			if !o.noOpen {
-				_ = osutil.OpenURL(uiURL)
-			}
-		case <-ctx.Done():
+	// Wait for the listeners before showing the tray: a startup error (port busy
+	// or reserved) must be reported, not left behind an icon with nothing running.
+	select {
+	case <-ready:
+	case err = <-done:
+		if err != nil && hidden {
+			osutil.Alert("netchat", err.Error())
 		}
-	}()
+		return err
+	}
+	if !o.noOpen {
+		_ = osutil.OpenURL(uiURL)
+	}
 
 	if tray.Supported {
 		tray.Run(tray.Options{
@@ -175,7 +179,7 @@ func runService(ctx context.Context, cfg config.Config, log *slog.Logger, ready 
 
 	lanLn, err := net.Listen("tcp4", fmt.Sprintf("0.0.0.0:%d", cfg.HTTPPort))
 	if err != nil {
-		return fmt.Errorf("LAN port %d is busy (is another netchat running? use --http-port): %w", cfg.HTTPPort, err)
+		return fmt.Errorf("LAN port %d is busy (another netchat running, or reserved by WSL/Hyper-V? use --http-port): %w", cfg.HTTPPort, err)
 	}
 	apiLn, err := net.Listen("tcp", cfg.APIAddr)
 	if err != nil {
@@ -189,6 +193,15 @@ func runService(ctx context.Context, cfg config.Config, log *slog.Logger, ready 
 	apiSrv := &http.Server{Handler: api.Handler(n), ReadHeaderTimeout: 10 * time.Second, BaseContext: base}
 	go func() { _ = lanSrv.Serve(lanLn) }()
 	go func() { _ = apiSrv.Serve(apiLn) }()
+	// Older peers may have saved this machine as host:LegacyPort. Best effort:
+	// WSL's mirrored networking can reserve that port on Windows.
+	if cfg.HTTPPort != protocol.LegacyPort {
+		if ln, err := net.Listen("tcp4", fmt.Sprintf("0.0.0.0:%d", protocol.LegacyPort)); err != nil {
+			log.Info("legacy LAN port unavailable", "port", protocol.LegacyPort, "err", err)
+		} else {
+			go func() { _ = lanSrv.Serve(ln) }()
+		}
+	}
 
 	log.Info("netchat started", "machine", cfg.Name, "instance", cfg.InstanceID[:8],
 		"lan", lanLn.Addr().String(), "ui", "http://"+apiLn.Addr().String()+"/", "data", cfg.DataDir)

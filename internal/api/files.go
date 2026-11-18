@@ -32,6 +32,10 @@ func registerFiles(mux *http.ServeMux, n *node.Node) {
 			httpx.Error(w, http.StatusBadRequest, "bad_request", `expected {"to":..., "paths":[...], "text":...}`)
 			return
 		}
+		if _, err := boardHost(n, req.To); err != nil { // before offering anything
+			writeErr(w, err)
+			return
+		}
 		var refs []protocol.FileRef
 		for _, p := range req.Paths {
 			ref, err := n.OfferPath(p)
@@ -59,6 +63,10 @@ func registerFiles(mux *http.ServeMux, n *node.Node) {
 		}
 		// Resolve the target before storing bytes, to fail fast.
 		if _, err := n.LocalIdentity(q.Get("as")); err != nil {
+			writeErr(w, err)
+			return
+		}
+		if _, err := boardHost(n, q.Get("to")); err != nil {
 			writeErr(w, err)
 			return
 		}

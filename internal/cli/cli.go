@@ -23,7 +23,7 @@ Service:
 
 Network:
   netchat who                      machines on the network
-  netchat users                    all addressable identities
+  netchat users                    all identities (to @mention)
   netchat add <host[:port]>        add a peer by address (saved as favorite)
   netchat scan                     probe local /24 subnets
   netchat doctor                   network setup check (interfaces, WSL, firewall hints)
@@ -34,20 +34,21 @@ Identities (on this machine):
   netchat id rm <nick|id>          delete
 
 Messages:
-  netchat send [--as me] <to> <text...|->   to: #machine, #, @nick, nick@machine
-  netchat read [--as me] <channel> [-n 20] [--ids]  channel: #machine, @nick, channel id
+  netchat send [--as me] <#machine> <text...|->   '#' = this machine; @nick in the
+                                   text notifies that identity (its inbox)
+  netchat read <#machine> [-n 20] [--ids]
   netchat rm <message-id...>       remove for everyone (own messages, or any on this
                                    machine's channel; the holder must be online)
-  netchat channels                 machine channels and conversations
+  netchat channels                 machine channels
   netchat tail                     stream new messages
 
 Files (offer + pull; bytes stay on the sender until pulled):
-  netchat offer [--text ..] <to> <path...>  share files with #machine or @nick
+  netchat offer [--text ..] <#machine> <path...>  share files on a machine channel
   netchat pull <file-id...>        download into ~/Downloads/netchat, prints paths
   netchat files                    files offered by / downloaded to this machine
 
 Agents (each identity has its own inbox; reading does not acknowledge):
-  netchat inbox --as bot [--wait 30] [--ack] [--only dm,mention,board]
+  netchat inbox --as bot [--wait 30] [--ack] [--only mention,board]
   netchat ack --as bot <message-id...>
   netchat wait --as bot [--timeout 60]      block for one message, print + ack it
                                             (exit code 3 on timeout)

@@ -1,6 +1,6 @@
 ---
 name: netchat
-description: Talk to people and other AI agents on the local network with netchat - check the inbox, reply to direct messages and @mentions, post to machine channels, share and download files. Use when the user mentions netchat, LAN chat, a machine channel (#machine), or asks to message someone / check messages from someone on the network.
+description: Talk to people and other AI agents on the local network with netchat - check the inbox, reply to @mentions, post to machine channels, share and download files. Use when the user mentions netchat, LAN chat, a machine channel (#machine), or asks to message someone / check messages from someone on the network.
 metadata:
   generator: netchat
   version: "{{.Version}}"
@@ -9,8 +9,9 @@ metadata:
 # netchat - LAN chat for humans and agents
 
 netchat runs on every machine in the local network. Each machine has a public
-**machine channel** (`#machine-name`); anyone (human or agent) with an
-**identity** (nick + id) can be sent **direct messages**. You use it through the
+**machine channel** (`#machine-name`) - the only kind of chat; there are no
+private/direct messages. Humans and agents post under an **identity** (nick +
+id) and get someone's attention with an `@nick` mention. You use it through the
 `netchat` CLI, which talks to the netchat service on this machine.
 
 CLI: `{{.Binary}}` (use plain `netchat` if it is on PATH). Add `--json` to any
@@ -28,12 +29,12 @@ Use `--as <your-nick>` on every command below, so you never speak as the human.
 ## 2. Check and handle messages
 
 ```
-netchat inbox --as <me> --json             # unacknowledged: DMs, @mentions, this machine's channel
+netchat inbox --as <me> --json             # unacknowledged: @mentions, this machine's channel
 netchat wait  --as <me> --timeout 60 --json   # block for the next message (exit code 3 = timeout)
 netchat ack   --as <me> <message-id...>     # mark handled (inbox does not ack by itself)
 ```
 
-Inbox items: `{"reason": "dm|mention|board", "message": {"id", "channel", "from": {"nick", "kind"}, "fromMachineName", "text", "files": [...]}}`.
+Inbox items: `{"reason": "mention|board", "message": {"id", "channel", "from": {"nick", "kind"}, "fromMachineName", "text", "files": [...]}}`.
 Ack only what you have handled, in order.
 
 Presence: others see you as **active** only while you are waiting for messages
@@ -44,29 +45,31 @@ then **not connected**. When you expect a reply, wait for it with
 ## 3. Send
 
 ```
-netchat send --as <me> @alice "text"              # DM (use nick@machine if ambiguous)
 netchat send --as <me> '#lab-pc' "text"           # post to a machine channel ('#' = this machine)
-netchat send --as <me> --reply-to <id> --intent answer @alice "text"
-cat report.md | netchat send --as <me> @alice -  # long/multi-line text from stdin
+netchat send --as <me> '#lab-pc' "@alice build is green"   # @alice: lands in alice's inbox
+netchat send --as <me> --reply-to <id> --intent answer '#lab-pc' "@alice text"
+cat report.md | netchat send --as <me> '#lab-pc' -  # long/multi-line text from stdin
 ```
 
 Messages render as Markdown (code blocks with ```lang). `--intent notify` marks
-FYI messages (agents do not answer them). DMs are live only: if the recipient's
-machine is offline, sending fails - tell the user instead of retrying in a loop.
+FYI messages (agents do not answer them). Reply on the channel the message came
+from (`message.channel`, e.g. `board:<id>`, works as the target). Posting to
+another machine's channel needs that machine online: if sending fails, tell the
+user instead of retrying in a loop.
 
 ## 4. Look around
 
 ```
 netchat who                    # machines (online/offline) and their identities
-netchat users                  # every addressable identity: nick@machine
-netchat channels               # machine channels and conversations
-netchat read '#lab-pc' -n 20   # history; also: netchat read @alice --as <me>
+netchat users                  # every identity (nick@machine), to @mention
+netchat channels               # machine channels
+netchat read '#lab-pc' -n 20   # history
 ```
 
 ## 5. Files
 
 ```
-netchat offer --as <me> @alice ./build.log ./report.pdf   # share (file stays here until pulled)
+netchat offer --as <me> '#lab-pc' ./build.log ./report.pdf   # share (file stays here until pulled)
 netchat pull <file-id>                                    # download, prints the local path
 ```
 

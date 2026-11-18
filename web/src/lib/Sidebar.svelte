@@ -36,7 +36,7 @@
   }
 
   async function removeId(i) {
-    if (!confirm(`Delete identity "${i.nick}"? Others will no longer be able to reach it.`)) return
+    if (!confirm(`Delete identity "${i.nick}"? Others will no longer be able to mention it.`)) return
     try { await app.deleteIdentity(i.id) } catch (err) { app.error = err.message }
   }
 
@@ -102,23 +102,10 @@
     </form>
     {#if peerMsg}<div class="hint">{peerMsg}</div>{/if}
 
-    {#if app.dms.length}
-      <h3>Conversations</h3>
-      {#each app.dms as c (c.id)}
-        <button class="item" class:sel={c.id === app.current} class:offline={presence(c.peer) === 'offline'}
-          onclick={() => app.open(c.id)} title={presenceLabel(c.peer)}>
-          <span class="dot {presence(c.peer)}"></span>
-          <span class="name" style:color={colorFor(c.peer?.id)}>{c.peer?.kind === 'agent' ? '🤖 ' : ''}{c.peer?.nick}</span>
-          {#if c.me && c.me.id !== app.me?.id}<span class="tag">as {c.me.nick}</span>{/if}
-          {#if app.unread(c)}<span class="badge">{app.unread(c)}</span>{/if}
-        </button>
-      {/each}
-    {/if}
-
     <h3>People &amp; agents</h3>
     {#snippet person(p)}
-      <button class="item" class:offline={presence(p) === 'offline'} onclick={() => app.openDM(p)}
-        title="{p.nick}@{p.machineName} · {presenceLabel(p)}">
+      <button class="item" class:offline={presence(p) === 'offline'} onclick={() => app.mention(p)}
+        title="{p.nick}@{p.machineName} · {presenceLabel(p)} · click to @mention">
         <span class="dot {presence(p)}"></span>
         <span class="name" style:color={colorFor(p.id)}>{p.kind === 'agent' ? '🤖 ' : ''}{p.nick}</span>
         <span class="sub">@{p.machineName}</span>

@@ -18,22 +18,8 @@
   const subtitle = $derived.by(() => {
     const c = app.chan
     if (!c) return ''
-    if (c.kind === 'board') {
-      const m = app.machines.find((m) => m.instanceId === c.machineId)
-      return m?.self ? 'your machine channel — anyone on the network can post here' : `machine channel on ${m?.addr ?? '?'}`
-    }
-    return `${c.peer?.kind ?? ''} on ${c.peer?.machineName ?? '?'} · ${presenceLabel(c.peer)} · you are ${c.me?.nick ?? app.me?.nick}`
-  })
-
-  // Tell the sender when the other side is not listening (the message still waits in its inbox).
-  const dmNotice = $derived.by(() => {
-    const c = app.chan
-    if (c?.kind !== 'dm' || !c.peer) return ''
-    const p = presence(c.peer)
-    if (c.peer.online === false) return `${c.peer.nick}'s machine is offline — DMs cannot be delivered until it is back.`
-    if (p === 'offline') return `${c.peer.nick} is not connected — your message will wait in its inbox until it checks netchat.`
-    if (p === 'idle') return `${c.peer.nick} was ${presenceLabel(c.peer)} — it will see your message when it next checks netchat.`
-    return ''
+    const m = app.machines.find((m) => m.instanceId === c.machineId)
+    return m?.self ? 'your machine channel — anyone on the network can post here' : `machine channel on ${m?.addr ?? '?'}`
   })
 
   $effect(() => {
@@ -51,13 +37,13 @@
 
   // Copy buttons inside rendered code blocks.
   async function onMessagesClick(e) {
-    // @mention -> open a DM with that identity (online ones first)
+    // @mention -> mention that identity back (online ones first)
     const men = e.target.closest?.('.mention')
     if (men) {
       const nick = men.dataset.nick.toLowerCase()
       const hits = app.directory.filter((d) => d.nick.toLowerCase() === nick && d.id !== app.me?.id)
       hits.sort((a, b) => Number(b.online) - Number(a.online))
-      if (hits[0]) app.openDM(hits[0])
+      if (hits[0]) app.mention(hits[0])
       return
     }
     const btn = e.target.closest?.('[data-copy]')
@@ -102,9 +88,9 @@
   <header>
     <div class="title">
       {#if app.chan}
-        <span class="dot {app.chan.kind === 'dm' ? presence(app.chan.peer) : app.chan.online ? 'on' : ''}"></span>
+        <span class="dot" class:on={app.chan.online}></span>
         <h2>{app.chan.name}</h2>
-        {#if app.chan.kind === 'dm' ? presence(app.chan.peer) === 'offline' : !app.chan.online}<span class="tag warn">{app.chan.kind === 'dm' ? 'not connected' : 'offline'}</span>{/if}
+        {#if !app.chan.online}<span class="tag warn">offline</span>{/if}
       {:else}
         <h2>netchat</h2>
       {/if}
@@ -161,8 +147,8 @@
           ></div>
           <h3>On this machine</h3>
           {#each here as p (p.id)}
-            <button class="item" onclick={() => app.openDM(p)} disabled={p.id === app.me?.id}
-              title={p.id === app.me?.id ? 'you' : `Message ${p.nick}`}>
+            <button class="item" onclick={() => app.mention(p)} disabled={p.id === app.me?.id}
+              title={p.id === app.me?.id ? 'you' : `Mention ${p.nick}`}>
               <span class="dot {presence(p)}" title={presenceLabel(p)}></span>
               <span class="name" style:color={colorFor(p.id)}>{p.kind === 'agent' ? '🤖 ' : ''}{p.nick}</span>
             </button>
@@ -173,9 +159,8 @@
 
     {#if app.error}<div class="error" role="alert">{app.error}<button class="x" onclick={() => (app.error = '')}>×</button></div>{/if}
 
-    {#if dmNotice}<div class="notice">{dmNotice}</div>{/if}
     <Composer bind:this={composer} onsent={() => (stick = true)} />
   {:else}
-    <div class="empty center">{app.connected ? 'Pick a machine or a person.' : 'Connecting to the netchat service…'}</div>
+    <div class="empty center">{app.connected ? 'Pick a machine.' : 'Connecting to the netchat service…'}</div>
   {/if}
 </main>

@@ -198,7 +198,7 @@ func sendCmd(args []string) error {
 		return err
 	}
 	if f.NArg() < 2 {
-		return errors.New("usage: netchat send [--as me] <#machine|@nick> <text...|->")
+		return errors.New("usage: netchat send [--as me] <#machine> <text...|->   (@nick in the text notifies someone)")
 	}
 	text := strings.Join(f.Args()[1:], " ")
 	if text == "-" {
@@ -221,7 +221,6 @@ func sendCmd(args []string) error {
 
 func read(args []string) error {
 	f := newFlags("read")
-	as := f.String("as", "", "local identity (for @nick conversations)")
 	limit := f.Int("n", 20, "number of messages")
 	after := f.Int64("after", 0, "only messages with seq > after")
 	showIDs := f.Bool("ids", false, "show message ids (for netchat rm)")
@@ -230,9 +229,9 @@ func read(args []string) error {
 		return err
 	}
 	if f.NArg() != 1 {
-		return errors.New("usage: netchat read <#machine|@nick|channel-id>")
+		return errors.New("usage: netchat read <#machine|channel-id>")
 	}
-	ms, err := c.Messages(f.Arg(0), *as, *after, 0, *limit)
+	ms, err := c.Messages(f.Arg(0), *after, 0, *limit)
 	if err != nil {
 		return err
 	}
@@ -296,11 +295,7 @@ func channels(args []string) error {
 		if !ch.LastTS.IsZero() {
 			last = ago(ch.LastTS) + " ago"
 		}
-		name := ch.Name
-		if ch.Kind == "dm" && ch.Me != nil && ch.Peer != nil {
-			name = fmt.Sprintf("@%s <-> %s@%s", ch.Me.Nick, ch.Peer.Nick, dash(ch.Peer.MachineName))
-		}
-		fmt.Fprintf(tw, "%s\t%s\t%d\t%s\t%s\n", name, status, ch.LastSeq, last, ch.ID)
+		fmt.Fprintf(tw, "%s\t%s\t%d\t%s\t%s\n", ch.Name, status, ch.LastSeq, last, ch.ID)
 	}
 	return tw.Flush()
 }
@@ -348,9 +343,6 @@ func machineNames(c *client.Client) map[string]string {
 
 func formatLine(m protocol.Message, where string) string {
 	from := fmt.Sprintf("%s@%s", nickLabel(m.From), m.FromMachineName)
-	if m.To != nil {
-		from += " -> " + nickLabel(*m.To)
-	}
 	text := m.Text
 	if m.Deleted {
 		text = "(message removed)"
@@ -384,7 +376,7 @@ func offer(args []string) error {
 		return err
 	}
 	if f.NArg() < 2 {
-		return errors.New("usage: netchat offer [--as me] [--text ...] <#machine|@nick> <path...>")
+		return errors.New("usage: netchat offer [--as me] [--text ...] <#machine> <path...>")
 	}
 	m, err := c.Offer(protocol.SendRequest{As: *as, To: f.Arg(0), Text: *text}, f.Args()[1:])
 	if err != nil {

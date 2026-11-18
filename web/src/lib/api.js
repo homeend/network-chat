@@ -56,11 +56,6 @@ export function humanSize(n) {
 
 export const inlineImage = (mime) => ['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(mime)
 
-// Must match protocol.DMChannel in Go.
-export function dmChannel(a, b) {
-  return a < b ? `dm:${a}:${b}` : `dm:${b}:${a}`
-}
-
 export function hhmm(ts) {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }

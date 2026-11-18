@@ -6,10 +6,14 @@ import "time"
 
 const (
 	Proto          = "netchat/1"
-	Version        = "0.1.0"
-	DefaultPort    = 47800 // UDP beacons + LAN HTTP (same number, one firewall rule)
-	DefaultAPIPort = 47801 // localhost-only control API
+	Version        = "0.2.0"
+	DefaultPort    = 27800 // UDP beacons + LAN HTTP (same number, one firewall rule)
+	DefaultAPIPort = 27801 // localhost-only control API
 	DefaultGroup   = "224.0.0.178"
+	// LegacyPort is the LAN port of netchat 0.1.0 (inside the port range WSL's
+	// mirrored networking may reserve). Still beaconed to and probed, and
+	// listened on when it can be bound, so older peers keep finding us.
+	LegacyPort = 47800
 )
 
 // IdentityRef is the public view of an addressable identity (human or agent).
@@ -98,11 +102,11 @@ const (
 	MaxHops      = 12
 )
 
-// Message is a chat message on a machine board or in a DM.
+// Message is a chat message on a machine channel.
 //
-// Channel ids: "board:<instanceId>" for a machine channel (seq assigned by
-// the hosting machine) and "dm:<idA>:<idB>" (sorted identity ids; seq is
-// assigned locally by each side).
+// Channel id: "board:<instanceId>"; seq is assigned by the hosting machine.
+// (netchat 0.1.0 also had direct messages, "dm:<idA>:<idB>"; they are no
+// longer sent, listed or accepted.)
 type Message struct {
 	ID              string       `json:"id"`
 	Channel         string       `json:"channel"`
@@ -110,8 +114,6 @@ type Message struct {
 	From            IdentityRef  `json:"from"`
 	FromMachine     string       `json:"fromMachine"`
 	FromMachineName string       `json:"fromMachineName"`
-	To              *IdentityRef `json:"to,omitempty"` // DMs only
-	ToMachine       string       `json:"toMachine,omitempty"`
 	Text            string       `json:"text"`
 	Intent          string       `json:"intent,omitempty"`
 	Hops            int          `json:"hops,omitempty"`
@@ -129,8 +131,7 @@ func (m Message) Tombstone() Message {
 	return m
 }
 
-// DeleteRequest asks the machine holding a message (board host or DM
-// recipient) to remove it: POST /p/board/delete, POST /p/dm/delete.
+// DeleteRequest asks a board host to remove a message: POST /p/board/delete.
 // Machine is the requesting instance; only the sender's machine (or the
 // board host itself) may remove a message.
 type DeleteRequest struct {
@@ -170,24 +171,15 @@ type FileStatus struct {
 
 func BoardChannel(instanceID string) string { return "board:" + instanceID }
 
-func DMChannel(a, b string) string {
-	if a > b {
-		a, b = b, a
-	}
-	return "dm:" + a + ":" + b
-}
-
 // ChannelInfo is a row of GET /v1/channels.
 type ChannelInfo struct {
-	ID        string       `json:"id"`
-	Kind      string       `json:"kind"` // board | dm
-	Name      string       `json:"name"`
-	MachineID string       `json:"machineId,omitempty"` // board host
-	Online    bool         `json:"online"`
-	Peer      *DirEntry    `json:"peer,omitempty"` // dm: the other side
-	Me        *IdentityRef `json:"me,omitempty"`   // dm: our side
-	LastSeq   int64        `json:"lastSeq"`
-	LastTS    time.Time    `json:"lastTs"`
+	ID        string    `json:"id"`
+	Kind      string    `json:"kind"` // board
+	Name      string    `json:"name"`
+	MachineID string    `json:"machineId,omitempty"` // board host
+	Online    bool      `json:"online"`
+	LastSeq   int64     `json:"lastSeq"`
+	LastTS    time.Time `json:"lastTs"`
 }
 
 // Event is pushed on the local SSE stream (/v1/events).
@@ -199,8 +191,8 @@ type Event struct {
 
 // SendRequest is the body of POST /v1/send.
 //
-// To accepts: "#machine" (machine channel; "#" = this machine), "@nick",
-// "nick@machine", an identity id, or a channel id ("board:<id>", "dm:<a>:<b>").
+// To accepts "#machine" (machine channel; "#" = this machine) or a channel
+// id ("board:<id>"). To reach someone, post on a channel and @mention them.
 type SendRequest struct {
 	As      string `json:"as,omitempty"` // local identity nick/id; default: first human
 	To      string `json:"to"`
@@ -212,7 +204,7 @@ type SendRequest struct {
 
 // InboxItem is one unacknowledged message for an identity.
 type InboxItem struct {
-	Reason  string  `json:"reason"` // dm | board | mention
+	Reason  string  `json:"reason"` // board | mention
 	Message Message `json:"message"`
 }
 

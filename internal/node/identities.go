@@ -194,42 +194,6 @@ func (n *Node) Directory() []protocol.DirEntry {
 	return out
 }
 
-// ResolveIdentity finds an addressable identity by "nick", "@nick",
-// "nick@machine", full id or id prefix (>= 4 chars).
-func (n *Node) ResolveIdentity(target string) (protocol.DirEntry, error) {
-	t := strings.TrimPrefix(strings.TrimSpace(target), "@")
-	if t == "" {
-		return protocol.DirEntry{}, fmt.Errorf("%w: empty target", ErrInvalid)
-	}
-	dir := n.Directory()
-	for _, e := range dir {
-		if e.ID == t {
-			return e, nil
-		}
-	}
-	nick, machine, hasMachine := strings.Cut(t, "@")
-	var hits []protocol.DirEntry
-	for _, e := range dir {
-		if !strings.EqualFold(e.Nick, nick) {
-			continue
-		}
-		if hasMachine && !strings.EqualFold(e.MachineName, machine) && !strings.HasPrefix(e.MachineID, strings.ToLower(machine)) {
-			continue
-		}
-		hits = append(hits, e)
-	}
-	if len(hits) == 0 && len(t) >= 4 && !hasMachine {
-		for _, e := range dir {
-			if idMatches(e.ID, t) {
-				hits = append(hits, e)
-			}
-		}
-	}
-	return pickOne(hits, target, func(e protocol.DirEntry) string {
-		return fmt.Sprintf("%s@%s (id …%s)", e.Nick, e.MachineName, ShortID(e.ID))
-	})
-}
-
 // ResolveMachine finds a machine by "#name", name, or instance id prefix.
 // "" or "#" means this machine.
 func (n *Node) ResolveMachine(target string) (protocol.Machine, error) {
